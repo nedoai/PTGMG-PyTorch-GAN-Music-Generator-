@@ -1,4 +1,4 @@
-# PTGMG (PyTorch-GAN-Music-Generator)
+# PTGMG (PyTorch-GAN-Music-Generator) :musical_keyboard:
 
 ## Project Description
 
@@ -19,5 +19,13 @@ The project structure is designed to provide clarity and simplicity, allowing yo
 Stay updated with the latest harmonies and developments by joining our Telegram News channel: [@nedoainews](https://t.me/nedoainews).
 
 Unleash your inner composer and embark on a sonic adventure with PTGMG. Let the melodies flow, the algorithms harmonize, and the music transcend.
+
+## How to use?
+
+Run fit_model_with_save_points (recomended).py. Start training the model. Then if you need to add more data for better generation - run fine-tune-model-trans-method.py or fine_tune.py (fine-tune-model-trans-method.py) - should make it sound better (not exact). If you don't want to bother with additional training - test_with_prompt.py for tests. 
+
+Also install the following libraries:
+
+pip install librosa soundfile torchtext torch numpy (if torchtext is not working - install torchtext==0.6.0)
 
 :notes: :musical_keyboard: :guitar: :trumpet: :violin: :drum: :notes:

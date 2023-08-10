@@ -26,6 +26,6 @@ Run fit_model_with_save_points (recomended).py. Start training the model. Then i
 
 Also install the following libraries:
 
-pip install librosa soundfile torchtext torch numpy (if torchtext is not working - install torchtext==0.6.0)
+pip install librosa soundfile torchtext torch numpy transformers (if torchtext is not working - install torchtext==0.6.0)
 
 :notes: :musical_keyboard: :guitar: :trumpet: :violin: :drum: :notes:

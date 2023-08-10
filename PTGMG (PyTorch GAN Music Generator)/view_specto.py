@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import librosa
 
 # Замените на путь к вашему аудио-файлу
-audio_file_path = r'generated_audio\атмосферный фонк.wav'
+audio_file_path = r'generated_audio.wav'
 
 # Загрузка аудио
 audio, sr = librosa.load(audio_file_path, sr=None)

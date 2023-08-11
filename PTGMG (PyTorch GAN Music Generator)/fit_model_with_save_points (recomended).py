@@ -116,7 +116,7 @@ def compute_accuracy(predictions, targets):
 # Training
 best_loss = float('inf')
 best_generator_weights = None
-num_epochs = 100
+num_epochs = 1
 for epoch in range(num_epochs):
     for i, (real_audio, descriptions) in enumerate(dataloader):
         batch_size = real_audio.size(0)
@@ -153,4 +153,4 @@ for epoch in range(num_epochs):
               f"Real Accuracy: {real_accuracy} Fake Accuracy: {fake_accuracy}")
 
 if best_generator_weights is not None:
-    torch.save({'generator_state_dict': best_generator_weights}, 'best_generator.pth')
+    torch.save({'generator_state_dict': best_generator_weights}, 'model.pth')

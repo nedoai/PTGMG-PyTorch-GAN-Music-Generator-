@@ -52,13 +52,15 @@ class Generator(nn.Module):
         self.input_shape = input_shape
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, 512),
-            nn.ReLU(),
+            nn.BatchNorm1d(512),
+            nn.LeakyReLU(0.2),
             nn.Linear(512, 256),
-            nn.ReLU(),
+            nn.BatchNorm1d(256),
+            nn.LeakyReLU(0.2),
             nn.Linear(256, np.prod(input_shape)),
             nn.Tanh()
         )
-        
+
     def forward(self, z):
         generated_audio = self.fc(z)
         generated_audio = generated_audio.view(generated_audio.size(0), *self.input_shape)
@@ -70,13 +72,15 @@ class Discriminator(nn.Module):
         self.input_shape = input_shape
         self.fc = nn.Sequential(
             nn.Linear(np.prod(input_shape), 128),
-            nn.ReLU(),
+            nn.BatchNorm1d(128),
+            nn.LeakyReLU(0.2),
             nn.Linear(128, 256),
-            nn.ReLU(),
+            nn.BatchNorm1d(256),
+            nn.LeakyReLU(0.2),
             nn.Linear(256, 1),
             nn.Sigmoid()
         )
-        
+
     def forward(self, audio):
         audio_flat = audio.view(audio.size(0), -1)
         validity = self.fc(audio_flat)
@@ -122,7 +126,7 @@ for epoch in range(num_epochs):
         batch_size = real_audio.size(0)
         valid = torch.ones(batch_size, 1)
         fake = torch.zeros(batch_size, 1)
-        # Train G
+        # Train D
         optimizer_D.zero_grad()
         z = torch.randn(batch_size, latent_dim)
         fake_audio = generator(z)
@@ -139,14 +143,16 @@ for epoch in range(num_epochs):
         g_loss = criterion(discriminator(gen_audio), valid)
         g_loss.backward()
         optimizer_G.step()
+        
         if g_loss.item() < best_loss:
             best_loss = g_loss.item()
             best_generator_weights = generator.state_dict()
-            torch.save(best_generator_weights, 'best_transferred_generator.pth')
 
-        print(f"Epoch [{epoch}/{num_epochs}] Batch [{i}/{len(dataloader)}] D Loss: {d_loss.item()} G Loss: {g_loss.item()}")
+    print(f"Epoch [{epoch+1}/{num_epochs}] Batch [{i+1}/{len(dataloader)}] D Loss: {d_loss.item()} G Loss: {g_loss.item()}")
+
 if best_generator_weights is not None:
-    torch.save(best_generator_weights, 'best_transferred_generator.pth') # Saving best model
+    generator.load_state_dict(best_generator_weights)
+    torch.save({'generator_state_dict': best_generator_weights}, 'best_transferred_generator.pth') # Save the best model on this epoch moment
 
-# Saving just final model.
-torch.save(generator.state_dict(), 'transferred_generator.pth')
+# Saving final
+torch.save({'generator_state_dict': best_generator_weights}, 'transferred_generator.pth')

@@ -31,8 +31,10 @@ class AudioDataset(Dataset):
         else:
             pad_width = ((0, 0), (0, self.max_time_steps - log_mel_spec.shape[1]))
             log_mel_spec = np.pad(log_mel_spec, pad_width, mode='constant')
-
-        description = self.descriptions[idx]
+        try:
+            description = self.descriptions[idx]
+        except IndexError:
+            raise IndexError("You are trying to pre-train the model, but the descriptions for the audio are not sufficient for the model. Please make sure that your description dataset has = or > number of descriptions than audio files")
 
         return torch.tensor(log_mel_spec, dtype=torch.float32), description
 

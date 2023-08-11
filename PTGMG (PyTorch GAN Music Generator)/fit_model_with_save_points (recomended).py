@@ -37,7 +37,7 @@ class AudioDataset(Dataset):
         return torch.tensor(log_mel_spec, dtype=torch.float32), description
 
 
-# Generator and Discriminator with PyTorch
+# Generator and Discriminator
 class Generator(nn.Module):
     def __init__(self, latent_dim, input_shape):
         super(Generator, self).__init__()
@@ -45,13 +45,15 @@ class Generator(nn.Module):
         self.input_shape = input_shape
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, 512),
-            nn.ReLU(),
+            nn.BatchNorm1d(512),
+            nn.LeakyReLU(0.2),
             nn.Linear(512, 256),
-            nn.ReLU(),
+            nn.BatchNorm1d(256),
+            nn.LeakyReLU(0.2),
             nn.Linear(256, np.prod(input_shape)),
             nn.Tanh()
         )
-        
+
     def forward(self, z):
         generated_audio = self.fc(z)
         generated_audio = generated_audio.view(generated_audio.size(0), *self.input_shape)
@@ -63,13 +65,15 @@ class Discriminator(nn.Module):
         self.input_shape = input_shape
         self.fc = nn.Sequential(
             nn.Linear(np.prod(input_shape), 128),
-            nn.ReLU(),
+            nn.BatchNorm1d(128),
+            nn.LeakyReLU(0.2),
             nn.Linear(128, 256),
-            nn.ReLU(),
+            nn.BatchNorm1d(256),
+            nn.LeakyReLU(0.2),
             nn.Linear(256, 1),
             nn.Sigmoid()
         )
-        
+
     def forward(self, audio):
         audio_flat = audio.view(audio.size(0), -1)
         validity = self.fc(audio_flat)
@@ -94,12 +98,18 @@ with open(description_path, 'r', encoding="utf-8") as f:
 dataset = AudioDataset(audio_files, descriptions, time_steps)
 dataloader = DataLoader(dataset, batch_size=32, shuffle=True, collate_fn=lambda batch: (pad_sequence([item[0] for item in batch], batch_first=True, padding_value=0), [item[1] for item in batch]))
 
-# Creating an oscillator, discriminator and optimizers
 generator = Generator(latent_dim, input_shape)
 discriminator = Discriminator(input_shape)
-optimizer_G = optim.Adam(generator.parameters(), lr=0.0002, betas=(0.5, 0.999))
-optimizer_D = optim.Adam(discriminator.parameters(), lr=0.0002, betas=(0.5, 0.999))
-criterion = nn.BCELoss()
+optimizer_G = optim.Adam(generator.parameters(), lr=0.0002, betas=(0.9, 0.999), weight_decay=0.0001)
+optimizer_D = optim.Adam(discriminator.parameters(), lr=0.0002, betas=(0.9, 0.999), weight_decay=0.0001)
+criterion = nn.MSELoss()
+
+def compute_accuracy(predictions, targets):
+    rounded_predictions = torch.round(predictions)
+    correct = (rounded_predictions == targets).sum().item()
+    total = targets.size(0)
+    accuracy = correct / total
+    return accuracy
 
 # Training
 best_loss = float('inf')
@@ -110,6 +120,7 @@ for epoch in range(num_epochs):
         batch_size = real_audio.size(0)
         valid = torch.ones(batch_size, 1)
         fake = torch.zeros(batch_size, 1)
+
         # Training Discriminator
         optimizer_D.zero_grad()
         z = torch.randn(batch_size, latent_dim)
@@ -119,7 +130,7 @@ for epoch in range(num_epochs):
         d_loss = real_loss + fake_loss
         d_loss.backward()
         optimizer_D.step()
-        
+
         # Training Generator
         optimizer_G.zero_grad()
         z = torch.randn(batch_size, latent_dim)
@@ -128,13 +139,16 @@ for epoch in range(num_epochs):
         g_loss.backward()
         optimizer_G.step()
 
-        # Checking for loss improvement
+        real_accuracy = compute_accuracy(discriminator(real_audio), valid)
+        fake_accuracy = compute_accuracy(discriminator(gen_audio.detach()), fake)
+
         if g_loss.item() < best_loss:
             best_loss = g_loss.item()
             best_generator_weights = generator.state_dict()
 
-        print(f"Epoch [{epoch}/{num_epochs}] Batch [{i}/{len(dataloader)}] D Loss: {d_loss.item()} G Loss: {g_loss.item()}")
+        print(f"Epoch [{epoch}/{num_epochs}] Batch [{i}/{len(dataloader)}] "
+              f"D Loss: {d_loss.item()} G Loss: {g_loss.item()} "
+              f"Real Accuracy: {real_accuracy} Fake Accuracy: {fake_accuracy}")
 
-# Saving best model
 if best_generator_weights is not None:
-    torch.save(best_generator_weights, 'best_generator.pth')
+    torch.save({'generator_state_dict': best_generator_weights}, 'best_generator.pth')

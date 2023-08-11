@@ -39,11 +39,12 @@ class AudioDataset(Dataset):
         else:
             pad_width = ((0, 0), (0, self.max_time_steps - log_mel_spec.shape[1]))
             log_mel_spec = np.pad(log_mel_spec, pad_width, mode='constant')
-
-        description = self.descriptions[idx]
+        try:
+            description = self.descriptions[idx]
+        except IndexError:
+            raise IndexError("You are trying to pre-train the model, but the descriptions for the audio are not sufficient for the model. Please make sure that your description dataset has = or > number of descriptions than audio files")
 
         return torch.tensor(log_mel_spec, dtype=torch.float32), description
-
 
 # Generator and Discriminator with PyTorch
 class Generator(nn.Module):
@@ -53,13 +54,15 @@ class Generator(nn.Module):
         self.input_shape = input_shape
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, 512),
-            nn.ReLU(),
+            nn.BatchNorm1d(512),
+            nn.LeakyReLU(0.2),
             nn.Linear(512, 256),
-            nn.ReLU(),
+            nn.BatchNorm1d(256),
+            nn.LeakyReLU(0.2),
             nn.Linear(256, np.prod(input_shape)),
             nn.Tanh()
         )
-        
+
     def forward(self, z):
         generated_audio = self.fc(z)
         generated_audio = generated_audio.view(generated_audio.size(0), *self.input_shape)
@@ -71,13 +74,15 @@ class Discriminator(nn.Module):
         self.input_shape = input_shape
         self.fc = nn.Sequential(
             nn.Linear(np.prod(input_shape), 128),
-            nn.ReLU(),
+            nn.BatchNorm1d(128),
+            nn.LeakyReLU(0.2),
             nn.Linear(128, 256),
-            nn.ReLU(),
+            nn.BatchNorm1d(256),
+            nn.LeakyReLU(0.2),
             nn.Linear(256, 1),
             nn.Sigmoid()
         )
-        
+
     def forward(self, audio):
         audio_flat = audio.view(audio.size(0), -1)
         validity = self.fc(audio_flat)
@@ -104,16 +109,25 @@ new_dataloader = DataLoader(new_dataset, batch_size=32, shuffle=True, collate_fn
 
 generator = Generator(latent_dim, input_shape)
 discriminator = Discriminator(input_shape)
-
-generator.load_state_dict(torch.load('best_generator.pth'))
+checkpoint = torch.load('best_generator.pth')# Or diffrenet model
+generator.load_state_dict(checkpoint['generator_state_dict'])
 
 # Optimizers and criterion
-optimizer_G = optim.Adam(generator.parameters(), lr=0.0002, betas=(0.5, 0.999))
-optimizer_D = optim.Adam(discriminator.parameters(), lr=0.0002, betas=(0.5, 0.999))
-criterion = nn.BCELoss()
+generator = Generator(latent_dim, input_shape)
+discriminator = Discriminator(input_shape)
+optimizer_G = optim.Adam(generator.parameters(), lr=0.0002, betas=(0.9, 0.999), weight_decay=0.0001)
+optimizer_D = optim.Adam(discriminator.parameters(), lr=0.0002, betas=(0.9, 0.999), weight_decay=0.0001)
+criterion = nn.MSELoss()
+
+def compute_accuracy(predictions, targets):
+    rounded_predictions = torch.round(predictions)
+    correct = (rounded_predictions == targets).sum().item()
+    total = targets.size(0)
+    accuracy = correct / total
+    return accuracy
 
 # Fine-Tune model
-num_epochs = 10 # Adjust this number to suit your needs
+num_epochs = 250 # Adjust this number to suit your needs
 
 best_g_loss = float('inf')
 best_generator_weights = None
@@ -142,14 +156,20 @@ for epoch in range(num_epochs):
         g_loss.backward()
         optimizer_G.step()
 
-    print(f"Epoch [{epoch}/{num_epochs}] D Loss: {d_loss.item()} G Loss: {g_loss.item()}")
+        real_accuracy = compute_accuracy(discriminator(real_audio), valid)
+        fake_accuracy = compute_accuracy(discriminator(gen_audio.detach()), fake)
+
+    print(f"Epoch [{epoch}/{num_epochs}] "
+              f"D Loss: {d_loss.item()} G Loss: {g_loss.item()} "
+              f"Real Accuracy: {real_accuracy} Fake Accuracy: {fake_accuracy}")
 
     if g_loss.item() < best_g_loss:
         best_g_loss = g_loss.item()
         best_generator_weights = generator.state_dict()
-        torch.save(best_generator_weights, 'best_fine_tuned_generator.pth') # Use this final model.
+        torch.save({'generator_state_dict': best_generator_weights}, 'best_tuned.pth') # Use this final model (?)
 
 if best_generator_weights is not None:
     generator.load_state_dict(best_generator_weights)
 
-torch.save(generator.state_dict(), 'final_fine_tuned_generator.pth') # This model just final result
+torch.save({'generator_state_dict': best_generator_weights}, 'best_tuned.pth') # Or this model.
+
